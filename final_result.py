@@ -1,192 +1,157 @@
-# %%
 import numpy as np
 import pandas as pd
 
-# %%
-df = pd.read_csv("/Users/aayush./Desktop/Numerical/real_estate_dataset.csv")
+# Load the dataset and determine the number of rows and columns
+data = pd.read_csv("/Users/aayush./Desktop/Numerical/real_estate_dataset.csv")
 
-# get number of samples and features
-n_samples, n_features = df.shape
+rows, cols = data.shape
 
-# get column names
-columns = df.columns
+# Extract column headers
+col_headers = data.columns
 
-# %%
-np.savetxt("columns_names.txt", columns, fmt="%s")
+# Save the column names to a text file
+np.savetxt("headers_list.txt", col_headers, fmt="%s")
 
-# %%
-# Use Square_Feet, Garage_Size, Location_Score, Distance_to_Center as features
-X = df[["Square_Feet", "Garage_Size", "Location_Score", "Distance_to_Center"]]
+# Select specific features for the predictor variables
+features = data[["Square_Feet", "Garage_Size", "Location_Score", "Distance_to_Center"]]
 
-# Use price as the target
-y = df["Price"].values
+# Choose 'Price' as the target variable
+target = data["Price"].values
 
-# get number of samples and features
-n_samples, n_features = X.shape
+# Determine the dimensions of the feature matrix
+n_rows, n_features = features.shape
 
-# %%
-# Build a linear model to predict price from the four features in X
-# make an array of coefs of the size of n_features+1. Initialize to 1
-coefs = np.ones(n_features + 1)
+# Initialize coefficient array, including the intercept, with ones
+initial_weights = np.ones(n_features + 1)
 
-# predict the price for each sample in X
-predictions_bydefn = X @ coefs[1:] + coefs[0]
+# Compute predictions without modifying the feature matrix
+def_predictions = features @ initial_weights[1:] + initial_weights[0]
 
-# Append a column of 1s to X
-X = np.hstack((np.ones((n_samples, 1)), X))
+# Append a column of ones to represent the intercept term
+features_with_bias = np.hstack((np.ones((n_rows, 1)), features))
 
-# predict the price for each sample in X
-predictions = X @ coefs
+# Compute predictions using the bias-included feature matrix
+bias_predictions = features_with_bias @ initial_weights
 
-# see if all entries in predictions_bydefn and predictions are the same
-is_same = np.allclose(predictions_bydefn, predictions)
+# Check if predictions match using both methods
+same_predictions = np.allclose(def_predictions, bias_predictions)
+print(same_predictions)
 
-print(is_same)
+# Compute residuals and errors using predictions and actual values
+residuals = target - bias_predictions
+relative_residuals = residuals / target
 
-# %%
-# calculate the error using predictions and y
-errors = y - predictions
-# calculate the relative error 
-rel_errors = errors / y
-# calculate the mean of square of errors using a loop
+# Calculate mean squared error using iteration
+mse_loop = 0
+for idx in range(n_rows):
+    mse_loop += residuals[idx] ** 2
+mse_loop /= n_rows
 
-loss_loop = 0
-for i in range(n_samples):
-    loss_loop = loss_loop + errors[i]**2
+# Calculate mean squared error using matrix multiplication
+mse_matrix = np.transpose(residuals) @ residuals / n_rows
 
-loss_loop = loss_loop / n_samples
+# Verify both methods yield similar results for MSE
+mse_equal = np.allclose(mse_loop, mse_matrix)
+print(f"MSE computed via loop and matrix methods match: {mse_equal}\n")
 
-# calculate the mean of square of errors using matrix ops
-loss_matrix = np.transpose(errors) @ errors / n_samples
+# Print the residuals array dimensions and their L2 norm
+print(f"Residual size: {residuals.shape}")
+print(f"L2 norm of residuals: {np.linalg.norm(residuals)}")
+print(f"L2 norm of relative residuals: {np.linalg.norm(relative_residuals)}")
 
-# calculate the two methods of calculating mean squared error
-is_diff = np.allclose(loss_loop, loss_matrix)
-print(f"Are the loss by direct and matrix same? {is_diff}\n")
+# Recompute MSE using matrix-based operations for consistency
+mse_matrix = (target - features_with_bias @ initial_weights).T @ (target - features_with_bias @ initial_weights) / n_rows
 
-# print the size of errors and its L2 norm
-print(f"Size of errors: {errors.shape}")
-print(f"L2 norm of errors: {np.linalg.norm(errors)}")
-print(f"L2 norm of relative errors: {np.linalg.norm(rel_errors)}")
+# Derive the gradient of MSE with respect to coefficients
+grad_mse = -2 / n_rows * features_with_bias.T @ (target - features_with_bias @ initial_weights)
 
-# %%
-loss_matrix = (y - X @ coefs).T @ (y - X @ coefs) / n_samples
+# Solve normal equations to optimize coefficients
+optimized_weights = np.linalg.inv(features_with_bias.T @ features_with_bias) @ features_with_bias.T @ target
 
-# Calculate the gradient of the loss with respect to the coefficients 
-grad_matrix = -2 / n_samples * X.T @ (y - X @ coefs)
+# Save optimized coefficients to a file
+np.savetxt("optimized_weights.csv", optimized_weights, delimiter=",")
 
-# Set gradient equal to zero to get normal equations
+# Calculate predictions and residuals using the optimized model
+final_predictions = features_with_bias @ optimized_weights
+final_residuals = target - final_predictions
+print(f"L2 norm of final residuals: {np.linalg.norm(final_residuals)}")
+final_relative_residuals = final_residuals / target
 
-coefs = np.linalg.inv(X.T @ X) @ X.T @ y
+# Exclude 'Price' column to create the feature matrix without labels
+features_extracted = data.drop("Price", axis=1).values
+target_extracted = data["Price"].values
 
-# %%
-np.savetxt("coefs.csv", coefs, delimiter=",")
+# Re-determine matrix dimensions after column extraction
+n_rows, n_features = features_extracted.shape
 
-# %%
-# calculate predictions using optimal coefficients
-predictions_model = X @ coefs
-# calculate the errors using the optimal coefficients
-errors_model = y - predictions_model
-# print the L2 norm of the errors_model
-print(f"L2 norm of errors_model: {np.linalg.norm(errors_model)}")
-# print the L2 norm of the relative errors_model
-rel_errors_model = errors_model / y
+# Include the bias column in the features matrix
+features_with_bias = np.hstack((np.ones((n_rows, 1)), features_extracted))
 
-# %%
-X = df.drop("Price", axis=1).values
-y = df["Price"].values
+# Calculate the matrix rank of the Gramian matrix
+gramian_rank = np.linalg.matrix_rank(features_with_bias.T @ features_with_bias)
 
-# get the number of samples and features in X
-n_samples, n_features = X.shape
+# Apply QR factorization to decompose the matrix
+q_matrix, r_matrix = np.linalg.qr(features_with_bias)
 
-# %%
-# solve the linear model using the normal equations 
-X = np.hstack((np.ones((n_samples, 1)), X))
+# Save the upper triangular matrix to a CSV file
+np.savetxt("upper_triangular_r.csv", r_matrix, delimiter=",")
 
-# save coefs to a file named coefs_all.csv
-np.savetxt("coefs_all.csv", coefs, delimiter=",")
+# Use QR decomposition for coefficient derivation
+b_vector = q_matrix.T @ target_extracted
+coeff_qr = np.linalg.inv(r_matrix) @ b_vector
 
-# calculate the rank of X.T @ X
-rank_XTX = np.linalg.matrix_rank(X.T @ X)
+# Solve system of equations using backward substitution
+coeff_qr_backward = np.zeros(n_features + 1)
+for idx in range(n_features, -1, -1):
+    coeff_qr_backward[idx] = b_vector[idx]
+    for j in range(idx + 1, n_features + 1):
+        coeff_qr_backward[idx] -= r_matrix[idx, j] * coeff_qr_backward[j]
+    coeff_qr_backward[idx] /= r_matrix[idx, idx]
 
-# solve matrix equations using decomposition
-# QR factorization
+# Save results of backward substitution to a file
+np.savetxt("qr_backward_coefficients.csv", coeff_qr_backward, delimiter=",")
 
-Q, R = np.linalg.qr(X)
+# Perform Singular Value Decomposition (SVD)
+U, Sigma, V_trans = np.linalg.svd(features_with_bias)
 
-# %%
-np.savetxt("R.csv", R, delimiter=",")
+# Construct the pseudo-inverse of the singular value matrix
+sigma_inv = np.zeros((V_trans.shape[0], U.shape[0]))
+np.fill_diagonal(sigma_inv, 1 / Sigma)
 
-# %%
-# R * coefs = b
+# Calculate the Moore-Penrose pseudo-inverse of the feature matrix
+pseudo_inverse = V_trans.T @ sigma_inv @ U.T
 
-sol = Q.T @ Q
-np.savetxt("sol.csv", sol, delimiter=",")
+# Derive coefficients using the pseudo-inverse
+coeff_svd = pseudo_inverse @ target_extracted
 
-b = Q.T @ y
-coeffs_qr = np.linalg.inv(R) @ b
+# Save SVD-derived coefficients to a file
+np.savetxt("coefficients_svd.csv", coeff_svd, delimiter=",")
 
-# loop to solve R * coeffs = b using back substitution
-coeffs_qr_loop = np.zeros(n_features + 1)
-for i in range(n_features, -1, -1):
-    coeffs_qr_loop[i] = b[i]
-    for j in range(i + 1, n_features + 1):
-        coeffs_qr_loop[i] = coeffs_qr_loop[i] - R[i, j] * coeffs_qr_loop[j]
-    
-    coeffs_qr_loop[i] = coeffs_qr_loop[i] / R[i, i]
+# Compute predictions and residuals using SVD-based coefficients
+svd_predictions = features_with_bias @ coeff_svd
+svd_residuals = target_extracted - svd_predictions
 
-# %%
-np.savetxt("coeffs_qr_loop.csv", coeffs_qr_loop, delimiter=",")
+# Compute L2 norms for residuals and save them to files
+print(f"L2 norm of residuals (SVD): {np.linalg.norm(svd_residuals)}")
+np.savetxt("svd_residuals.csv", svd_residuals, delimiter=",")
 
-# %%
-# Perform Singular Value Decomposition (SVD) on X
-U, Sigma, VT = np.linalg.svd(X)
+svd_relative_residuals = svd_residuals / target_extracted
+np.savetxt("relative_residuals_svd.csv", svd_relative_residuals, delimiter=",")
+print(f"L2 norm of relative residuals (SVD): {np.linalg.norm(svd_relative_residuals)}")
 
-# Create the pseudo-inverse of Sigma (diagonal matrix)
-Sigma_inv = np.zeros((VT.shape[0], U.shape[0]))
-np.fill_diagonal(Sigma_inv, 1 / Sigma)
+# Perform eigenvalue decomposition of the Gramian matrix
+eigen_vals, eigen_vecs = np.linalg.eig(features_with_bias.T @ features_with_bias)
 
-# Compute the pseudo-inverse of X
-X_pseudo_inv = VT.T @ Sigma_inv @ U.T
+# Save eigenvalues and eigenvectors to separate files
+np.savetxt("eigen_values.csv", eigen_vals, delimiter=",")
+np.savetxt("eigen_vectors.csv", eigen_vecs, delimiter=",")
 
-# Calculate coefficients using the pseudo-inverse
-coefs_svd = X_pseudo_inv @ y
+# Reconstruct the Gramian matrix using eigen decomposition
+reconstructed_gramian = eigen_vecs @ np.diag(eigen_vals) @ eigen_vecs.T
 
-# Save the coefficients derived from SVD to a file
-np.savetxt("coefs_svd.csv", coefs_svd, delimiter=",")
+# Verify reconstruction accuracy
+accurate_reconstruction = np.allclose(features_with_bias.T @ features_with_bias, reconstructed_gramian)
+print(f"Gramian reconstruction accurate: {accurate_reconstruction}")
 
-# Recompute predictions using the coefficients from SVD
-predictions_svd = X @ coefs_svd
-
-# Compute the errors using predictions from SVD
-errors_svd = y - predictions_svd
-
-# Calculate the L2 norm of the SVD-derived errors
-l2_errors_svd = np.linalg.norm(errors_svd)
-print(f"L2 norm of errors_svd: {l2_errors_svd}")
-
-# Save errors from the SVD approach to a file
-np.savetxt("errors_svd.csv", errors_svd, delimiter=",")
-
-# Recompute relative errors using SVD approach
-rel_errors_svd = errors_svd / y
-np.savetxt("rel_errors_svd.csv", rel_errors_svd, delimiter=",")
-
-# Print the L2 norm of relative errors from SVD
-print(f"L2 norm of relative errors_svd: {np.linalg.norm(rel_errors_svd)}")
-
-# Eigen decomposition of X.T @ X
-eigenvalues, eigenvectors = np.linalg.eig(X.T @ X)
-
-# Save the eigenvalues and eigenvectors
-np.savetxt("eigenvalues.csv", eigenvalues, delimiter=",")
-np.savetxt("eigenvectors.csv", eigenvectors, delimiter=",")
-
-# Reconstruct X.T @ X using the eigen decomposition
-XTX_reconstructed = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
-
-# Verify reconstruction
-is_reconstruction_close = np.allclose(X.T @ X, XTX_reconstructed)
-print(f"Is X.T @ X reconstruction accurate? {is_reconstruction_close}")
-
-# Save reconstructed matrix to a file
-np.savetxt("XTX_reconstructed.csv", XTX_reconstructed, delimiter=",")
+# Save the reconstructed Gramian matrix
+np.savetxt("reconstructed_gramian.csv", reconstructed_gramian, delimiter=",")
