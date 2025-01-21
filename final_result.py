@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # Load the dataset and determine the number of rows and columns
 data = pd.read_csv("/Users/aayush./Desktop/Numerical/real_estate_dataset.csv")
@@ -155,3 +156,23 @@ print(f"Gramian reconstruction accurate: {accurate_reconstruction}")
 
 # Save the reconstructed Gramian matrix
 np.savetxt("reconstructed_gramian.csv", reconstructed_gramian, delimiter=",")
+
+# Plotting Price vs. Square Feet with regression line
+square_feet = features["Square_Feet"]
+intercept = optimized_weights[0]
+slope = optimized_weights[1]  # Coefficient for Square_Feet
+
+# Regression line
+regression_line = intercept + slope * square_feet
+
+# Scatter plot with regression line
+plt.figure(figsize=(10, 6))
+plt.scatter(square_feet, target, color="blue", label="Data Points")
+plt.plot(square_feet, regression_line, color="red", label="Regression Line", linewidth=2)
+plt.title("Price vs. Square Feet with Regression Line", fontsize=16)
+plt.xlabel("Square Feet", fontsize=14)
+plt.ylabel("Price", fontsize=14)
+plt.legend()
+plt.grid()
+plt.tight_layout()
+plt.show()
